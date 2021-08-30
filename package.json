@@ -1,0 +1,24 @@
+{
+  "name": "twitchbot",
+  "version": "1.0.0",
+  "description": "A twitch chat bot",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fagnerng/twitchbot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fagnerng/twitchbot/issues"
+  },
+  "homepage": "https://github.com/fagnerng/twitchbot#readme",
+  "dependencies": {
+    "tmi.js": "^1.8.5"
+  }
+}
