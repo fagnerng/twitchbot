@@ -3,6 +3,7 @@ const fs = require('fs');
 var ADMIN_USERS = {}
 const BOT_USERNAME = 'bifahbot'
 const CHANNELS_LIST = restoreChannels()
+const AUTH_TOKEN = getAuthToken(); 
 
 const opts = {
   identity: {
@@ -11,49 +12,70 @@ const opts = {
   },
   channels: CHANNELS_LIST
 };
-var DEFAULT_COMMANDS = ['add', 'remove', 'grant', 'ungrant', 'setinterval', 'removeinterval', 'count', 'resetcount']
-var commandList = { };
-var intervals = {};
-var counts = {}
-//intercepta mensagem do chat
-function mensagemChegou(alvo, context, mensagem, ehBot) {
-  if (context.username === 'bifah') { console.log(context)}
+var DEFAULT_COMMANDS = ['add', 'remove', 'grant', 'ungrant', 'setinterval', 'removeinterval', 'count', 'resetcount', 'time', 'hora', 'alias', 'unalias']
+var commandMap = {};
+var intervalMap = {};
+var countMap = {}
+var aliasMap = {}
+function onMessage(target, context, mensagem, self) {
   try {
-    if (ehBot) {
-      return; //se for mensagens do nosso bot ele não faz nada
+    if (self) {
+      return;
     }
 
     const raw = mensagem.trim().toLowerCase().split(' ');// remove espaço em branco da mensagem para verificar o comando
     var nomeDoComando = raw[0];
-    // checando o nosso comando
     if (nomeDoComando.startsWith('!')) {
       nomeDoComando = nomeDoComando.slice(1);
+      if (typeof aliasMap[nomeDoComando] !== 'undefined') {
+        nomeDoComando = aliasMap[nomeDoComando];
+      }
       if (nomeDoComando === 'commands') {
-        var commands = Object.keys(commandList);
+        var commands = Object.keys(commandMap);
+        commands = commands.concat(Object.keys(countMap));
         if (commands.length > 0) {
-          client.say(alvo, `@${context['display-name']} os comandos disponiveis são ${commands.join(', ')}`);
+          client.say(target, `@${context['display-name']} os comandos disponiveis são ${commands.join(', ')}`);
         } else {
-          client.say(alvo, `@${context['display-name']} nenhum comando cadastrado`);
+          client.say(target, `@${context['display-name']} nenhum comando cadastrado`);
         }
       } else if (nomeDoComando === 'remove') {
         if (isAdmin(context.username)) {
           var cmdToRemove = raw[1]
-          if (typeof commandList[cmdToRemove] !== 'undefined') {
-            delete commandList[cmdToRemove];
-            client.say(alvo, `command ${cmdToRemove} removed`);
+          if (typeof commandMap[cmdToRemove] !== 'undefined') {
+            delete commandMap[cmdToRemove];
+            client.say(target, `command ${cmdToRemove} removed`);
             saveCommands();
+          } else if (typeof countMap[cmdToRemove] !== 'undefined') {
+            delete countMap[cmdToRemove];
+            client.say(target, `count ${cmdToRemove} removed`);
+            saveCounts();
           }
         }
+      } else if (nomeDoComando === 'alias') {
+        if (isAdmin(context.username) && raw.length === 3) {
+          if (commandExists(raw[1]) && canCreateCommand(raw[2])) {
+            client.say(target, `alias created betwen ${raw[1]} and ${raw[2]}`);
+            aliasMap[raw[1]] = raw[2];
+            saveAlias();
+          }
+
+        }
+      } else if (nomeDoComando === 'unalias') {
+        if (isAdmin(context.username) && raw.length === 2 && typeof aliasMap[raw[1]] !== 'undefined') {
+          client.say(target, `alias ${raw[1]} removed`);
+          delete aliasMap[raw[1]];
+          saveAlias();
+        }
       } else if (nomeDoComando === 'grant') {
-        if (isAdmin(context.username) && raw.length === 2 ) {
+        if (isAdmin(context.username) && raw.length === 2) {
           ADMIN_USERS[raw[1]] = true;
-          client.say(alvo, `now, ${raw[1]}, can add new commands`);
+
           saveAdmins();
         }
       } else if (nomeDoComando === 'ungrant') {
-        if (isAdmin(context.username) && raw.length === 2 && raw[1] !== 'bifah' && raw[1]!==context.username) {
+        if (isAdmin(context.username) && raw.length === 2 && raw[1] !== 'bifah' && raw[1] !== context.username) {
           delete ADMIN_USERS[raw[1]];
-          client.say(alvo, `${raw[1]} removed from adms`);
+          client.say(target, `${raw[1]} removed from adms`);
           saveAdmins();
         }
       } else if (nomeDoComando === 'setinterval') {
@@ -61,131 +83,132 @@ function mensagemChegou(alvo, context, mensagem, ehBot) {
           var key = raw[1];
           var time = parseInt(raw[2]);
           var message = raw.splice(3);
-          console.log(`${key} ${message} (${new Date()} - automatica a cada ${time} minutos) `);
-          if (typeof intervals[key] === 'undefined' && !isNaN(time)) {
-            intervals[key] = setInterval(() => {
-              client.say(alvo, `${message} (${new Date().getTime()} - mensangem automatica a cada ${time} minutos) `);
+
+          if (typeof intervalMap[key] === 'undefined' && !isNaN(time)) {
+            client.say(target, `${message} (${new Date().getTime()} - mensangem automatica a cada ${time} minutos) `);
+            intervalMap[key] = { target, message, time, key };
+            intervalMap[key].id = setInterval(() => {
+              client.say(target, `${message} (${new Date().getTime()} - mensangem automatica a cada ${time} minutos) `);
             }, time * 1000 * 60);
+            saveIntervals();
           } else {
-            client.say(alvo, 'usage: !setInterval $KEY $TIME_MINUTES $MESSAGE');
+            client.say(target, 'usage: !setInterval $KEY $TIME_MINUTES $MESSAGE');
           }
         }
       } else if (nomeDoComando === 'clearinterval') {
-        if (isAdmin(context.username)) {
+        if (isAdmin(context.username, target)) {
           var key = raw[1];
-          if (typeof intervals[key] !== 'undefined') {
-            clearInterval(intervals[key]);
-            delete intervals[key];
+          if (typeof intervalMap[key] !== 'undefined') {
+            client.say(target, `interval ${key} canceled`);
+            clearInterval(intervalMap[key].id);
+            delete intervalMap[key];
+            saveIntervals();
           }
         }
       } else if (nomeDoComando === 'count' || nomeDoComando === 'resetcount') {
         if (isAdmin(context.username)) {
           var countName = raw[1];
-          if (typeof counts[countName] === 'undefined' || countName === resetcount) {
-            counts[countName] = 0;
-            client.say(alvo, `count ${countName} created/reset`);
+          if (typeof countMap[countName] === 'undefined' || countName === 'resetcount') {
+            countMap[countName] = 0;
+            client.say(target, `count ${countName} created/reset`);
             saveCounts();
           }
         }
       } else if (nomeDoComando === 'add') {
         if (!isAdmin(context.username)) {
-          client.say(alvo, `@${context['display-name']} deixe de ser buliçoso(a), apenas ${Object.keys(ADMIN_USERS).join(', ')} podem usar esse comando`);
+          client.say(target, `@${context['display-name']} deixe de ser buliçoso(a), apenas ${Object.keys(ADMIN_USERS).join(', ')} podem usar esse comando`);
         } else if (raw.length > 2) {
           var newCommand = raw[1]
           var reply = raw.slice(2).join(' ');
-          if (typeof commandList[newCommand] !== 'undefined' || DEFAULT_COMMANDS.indexOf(newCommand) >= 0 || Object.keys(counts).indexOf(newCommand) >= 0) {
-            client.say(alvo, `command ${newCommand} already exists`);
+          if (!commandExists(newCommand)) {
+            client.say(target, `command ${newCommand} already exists`);
           } else {
-            commandList[newCommand] = { reply };
-            client.say(alvo, `command ${newCommand} created`);
+            commandMap[newCommand] = { reply };
+            client.say(target, `command ${newCommand} created`);
             saveCommands();
           }
         } else {
-          client.say(alvo, 'deixe de ser preguiçoso, para adicionar um comando digite !add $CMD $REPLY');
+          client.say(target, 'deixe de ser preguiçoso, para adicionar um comando digite !add $CMD $REPLY');
         }
-  
-      } else if (typeof counts[nomeDoComando] !== 'undefined') {
-        counts[nomeDoComando]++;
-        client.say(alvo, `${alvo} já ${nomeDoComando} ${counts[nomeDoComando]} vezes`);
+      } else if (nomeDoComando === 'time' || nomeDoComando === 'hora') {
+        client.say(target, `${new Date().toLocaleString()}`);
+      } else if (typeof countMap[nomeDoComando] !== 'undefined') {
+        countMap[nomeDoComando]++;
+        client.say(target, `${target} já ${nomeDoComando} ${countMap[nomeDoComando]} vezes`);
         saveCounts();
-      } else if (typeof commandList[nomeDoComando] !== 'undefined') {
-        client.say(alvo, `${commandList[nomeDoComando].reply.replace('/me', '@'+context['display-name'])}`);
+      } else if (typeof commandMap[nomeDoComando] !== 'undefined') {
+        client.say(target, `${commandMap[nomeDoComando].reply.replace('/me', '@' + context['display-name'])}`);
       }
     }
   } catch (e) { console.error('error', e); }
 }
 
-function entrouNoChatDaTwitch(endereco, porta) {
-  console.log(`* Bot entrou no endereço ${endereco}:${porta}`);
-  client.say('robsss', ``)
+function commandExists(cmd) {
+  return typeof commandMap[cmd] != 'undefined' ||
+    typeof commandMap[cmd] !== 'undefined' ||
+    typeof aliasMap[cmd] !== 'undefined' ||
+    typeof intervalMap[cmd] !== 'undefined' ||
+    DEFAULT_COMMANDS.indexOf(cmd) >= 0;
+}
+
+function canCreateCommand(cmd) {
+  return typeof commandMap[cmd] === 'undefined' &&
+    typeof countMap[cmd] === 'undefined' &&
+    typeof aliasMap[cmd] === 'undefined' &&
+    typeof intervalMap[cmd] === 'undefined' &&
+    DEFAULT_COMMANDS.indexOf(cmd) < 0;
+}
+function onConnected(address, port) {
+  console.log(`* Bot entrou no endereço ${address}:${port}`);
+  client.say('#robsss', `voltei`)
+  restoreIntervals();
 }
 function saveCommands() {
-  fs.writeFileSync('commands.json', JSON.stringify(commandList, null, '  '));
+  save('commands', commandMap);
 }
 
 function restoreCommands() {
-  if (fs.existsSync('commands.json')) {
-    var buffer = fs.readFileSync('commands.json');
-    try {
-      commandList = JSON.parse(buffer.toString('utf-8'));
-    } catch (e) {
-      commandList = {};
-    }
-  }
+  commandMap = restore('commands', {});
 }
 function saveCounts() {
-  fs.writeFileSync('counts.json', JSON.stringify(counts, null, '  '));
+  save('counts', countMap);
 }
 
 function restoreCounts() {
-  if (fs.existsSync('counts.json')) {
-    var buffer = fs.readFileSync('counts.json');
-    try {
-      counts = JSON.parse(buffer.toString('utf-8'));
-    } catch (e) {
-      counts = {};
-    }
-  }
+  countMap = restore('counts', {});
 }
 
 function saveAdmins() {
-  fs.writeFileSync('admins.json', JSON.stringify(ADMIN_USERS, null, '  '));
+  save('admins', ADMIN_USERS);
 }
 
 function restoreAdmins() {
-  if (fs.existsSync('admins.json')) {
-    var buffer = fs.readFileSync('admins.json');
-    try {
-      ADMIN_USERS = JSON.parse(buffer.toString('utf-8'));
-    } catch (e) {
-      ADMIN_USERS = {};
-    }
-  }
-  if (Object.keys(ADMIN_USERS).length === 0) {
-    ADMIN_USERS['bifah']= true;
-    saveAdmins();
-  }
+  ADMIN_USERS = restore('admins', { bifah: true });
 }
 
 function restoreChannels() {
-  var ret = [];
-  if (fs.existsSync('channels.json')) {
-    var buffer = fs.readFileSync('channels.json');
-    try {
-      ret = JSON.parse(buffer.toString('utf-8'));
-    } catch (e) {
-      ret = [];
-    }
-  }
-  if (ret.length === 0) {
-    ret.push('robsss');
-  }
-
-  return ret;
+  return restore('channels', ['robsss']);
+}
+function saveIntervals() {
+  save('intervals', intervalMap);
 }
 
-function isAdmin(username) {
-  return Object.keys(ADMIN_USERS).indexOf(username) >= 0;
+function restoreIntervals() {
+  intervalMap = restore('intervals', {});
+  Object.keys(intervalMap).forEach((key) => {
+    console.log('restoring interval ' + key + ' every ' + intervalMap[key].time + ' minutes');
+    intervalMap[key] = setInterval(() => {
+      client.say(intervalMap[key].target, `${intervalMap[key].message} (${new Date().getTime()} - mensangem automatica a cada ${intervalMap[key].time} minutos) `);
+    }, intervalMap[key].time * 1000 * 60);
+  })
+}
+function isAdmin(username, target) {
+  return Object.keys(ADMIN_USERS).indexOf(username) >= 0 || ('#' + username) === target;
+}
+
+function getAuthToken() {
+  //access https://twitchapps.com/tmi/ to generate token
+  return restore('.token', {token:'token'}).token;
 }
 // Cria um cliente tmi com  nossas opções
 const client = new tmi.client(opts);
@@ -193,8 +216,29 @@ restoreCommands();
 restoreAdmins();
 restoreCounts();
 // Registra nossas funções
-client.on('message', mensagemChegou);
-client.on('error', (error) => { console.log('error', error)});
-client.on('connected', entrouNoChatDaTwitch);
+client.on('message', onMessage);
+client.on('error', (error) => { console.log('error', error) });
+client.on('connected', onConnected);
 // Connecta na Twitch:
-client.connect().then((resp) => { console.log('asd', resp)});
+client.connect().then((resp) => { console.log('asd', resp) });
+
+function save(filename, value) {
+  fs.writeFileSync(`${filename}.json`, JSON.stringify(value, null, '  '));
+}
+
+function restore(filename, defaultValue) {
+  var ret;
+  if (fs.existsSync(`${filename}.json`)) {
+    var buffer = fs.readFileSync(`${filename}.json`);
+    try {
+      ret = JSON.parse(buffer.toString('utf-8'));
+    } catch (e) {
+      ret = [];
+    }
+  }
+  if (typeof ret === 'undefined' && typeof defaultValue !== 'undefined') {
+    ret = defaultValue;
+  }
+
+  return ret;
+}

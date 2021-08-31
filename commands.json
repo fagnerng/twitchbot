@@ -1,1 +1,29 @@
-{"tiltou":{"reply":"/me e quando é que ele n tilta?"},"game":{"reply":"valorant"},"elo":{"reply":"muito afundado, abaixo do ferro"},"patente":{"reply":"robsss tem medo de jogar rankeada, por isso n tem patente definida"},"poucabala":{"reply":"pouca bala e muito rage"},"tiltado":{"reply":"/me, este streamer deve ter acabado de tiltar, aguarde 30 segundos enquanto o côco esfria"}}
+{
+  "elo": {
+    "reply": "muito afundado, abaixo do ferro"
+  },
+  "patente": {
+    "reply": "robsss tem medo de jogar rankeada, por isso n tem patente definida"
+  },
+  "poucabala": {
+    "reply": "pouca bala e muito rage"
+  },
+  "tiltado": {
+    "reply": "/me, este streamer deve ter acabado de tiltar, aguarde 30 segundos enquanto o côco esfria"
+  },
+  "bomdia": {
+    "reply": "bom dia meu/minha primo/prima"
+  },
+  "rerbecas": {
+    "reply": "@rerbecas abre as aposta ai"
+  },
+  "easy": {
+    "reply": "esse jogo é muito fácil, só desviar e atirar no balão"
+  },
+  "sub": {
+    "reply": "até o bot é sub e vc n"
+  },
+  "ban": {
+    "reply": "n me ban plz"
+  }
+}
